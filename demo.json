@@ -1,0 +1,55 @@
+{
+    "categories": [
+        {
+            "index": 0,
+            "name": "consumer",
+            "base": "consumer"
+        },
+        {
+            "index": 1,
+            "name": "provider",
+            "base": "provider"
+        },
+        {
+            "index": 2,
+            "name": "consumer and provider",
+            "base": "consumer and provider"
+        }
+    ],
+    "links": [
+        {
+            "source": 1,
+            "target": 3
+        },
+        {
+            "source": 0,
+            "target": 2
+        },
+        {
+            "source": 2,
+            "target": 3
+        }
+    ],
+    "nodes": [
+        {
+            "index": 0,
+            "name": "service-a",
+            "category": 0
+        },
+        {
+            "index": 1,
+            "name": "service-b",
+            "category": 0
+        },
+        {
+            "index": 2,
+            "name": "service-c",
+            "category": 2
+        },
+        {
+            "index": 3,
+            "name": "service-c",
+            "category": 1
+        }
+    ]
+}

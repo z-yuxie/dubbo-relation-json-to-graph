@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dubbo 集群网络拓扑图谱</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧控制面板 -->
+        <div class="control-panel">
+            <div class="panel-header">
+                <h1>Dubbo 拓扑图谱</h1>
+            </div>
+
+            <!-- 文件上传区 -->
+            <div class="panel-section">
+                <h3>数据导入</h3>
+                <div class="file-upload">
+                    <input type="file" id="fileInput" accept=".json" />
+                    <label for="fileInput" class="file-label">选择 JSON 文件</label>
+                    <div id="fileName" class="file-name"></div>
+                </div>
+            </div>
+
+            <!-- 布局配置区 -->
+            <div class="panel-section">
+                <h3>布局配置</h3>
+                <div class="form-group">
+                    <label>布局类型</label>
+                    <select id="layoutType">
+                        <option value="force">力导向布局</option>
+                        <option value="dagre">层次布局</option>
+                        <option value="circular">环形布局</option>
+                        <option value="grid">网格布局</option>
+                        <option value="concentric">同心圆布局</option>
+                    </select>
+                </div>
+                <div id="layoutParams"></div>
+                <button id="applyLayout" class="btn-primary">应用布局</button>
+            </div>
+
+            <!-- 画布控制区 -->
+            <div class="panel-section">
+                <h3>画布控制</h3>
+                <div class="control-buttons">
+                    <button id="clearEdges" class="btn-secondary">清空关系</button>
+                    <button id="clearCanvas" class="btn-secondary">清空画布</button>
+                </div>
+                <div class="form-group">
+                    <label>隐藏节点类型</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" class="hide-category" value="0" />
+                            Consumer
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" class="hide-category" value="1" />
+                            Provider
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" class="hide-category" value="2" />
+                            Consumer & Provider
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 检索区 -->
+            <div class="panel-section">
+                <h3>检索模式</h3>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="searchMode" value="node" checked />
+                        节点检索
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="searchMode" value="path" />
+                        路径检索
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="clearBeforeSearch" />
+                        检索前清空画布
+                    </label>
+                </div>
+
+                <!-- 节点检索 -->
+                <div id="nodeSearch" class="search-panel">
+                    <div class="form-group">
+                        <label>关键词（空格分隔）</label>
+                        <input type="text" id="nodeKeywords" placeholder="例: service user" />
+                    </div>
+                    <button id="searchNodes" class="btn-primary">查找节点</button>
+                </div>
+
+                <!-- 路径检索 -->
+                <div id="pathSearch" class="search-panel" style="display: none;">
+                    <div class="form-group">
+                        <label>起始节点关键词</label>
+                        <input type="text" id="pathStart" placeholder="起始节点包含的关键词" />
+                    </div>
+                    <div class="form-group">
+                        <label>目标节点关键词</label>
+                        <input type="text" id="pathEnd" placeholder="目标节点包含的关键词" />
+                    </div>
+                    <div class="form-group">
+                        <label>查找方向</label>
+                        <select id="pathDirection">
+                            <option value="directed">正向</option>
+                            <option value="reverse">反向</option>
+                            <option value="both">双向</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>最大跳数（可选）</label>
+                        <input type="number" id="maxHops" min="1" placeholder="不限制" />
+                    </div>
+                    <button id="searchPaths" class="btn-primary">查找路径</button>
+                </div>
+            </div>
+
+            <!-- 统计信息 -->
+            <div class="panel-section">
+                <h3>统计信息</h3>
+                <div id="stats" class="stats-info">
+                    <div class="stat-item">
+                        <span class="stat-label">节点总数:</span>
+                        <span id="totalNodes">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">关系总数:</span>
+                        <span id="totalEdges">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">当前显示节点:</span>
+                        <span id="visibleNodes">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">当前显示关系:</span>
+                        <span id="visibleEdges">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧图谱容器 -->
+        <div class="graph-container">
+            <div id="container"></div>
+            <div id="tooltip" class="tooltip"></div>
+        </div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+</body>
+</html>
