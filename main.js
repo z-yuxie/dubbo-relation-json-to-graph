@@ -4,7 +4,7 @@ import { Graph } from '@antv/g6';
 let graph = null;
 let originalData = null; // 原始完整数据
 let currentVisibleData = { nodes: [], edges: [] }; // 当前可见数据（用于统计）
-let currentLayout = 'dagre';  // 默认使用 dagre 布局
+let currentLayout = 'force';  // 默认使用力导向布局
 let layoutConfig = {};
 
 // 颜色配置
@@ -18,15 +18,11 @@ const categoryColors = {
 function createNodeData(node) {
     const nodeData = {
         id: `node-${node.index}`,
-        label: node.name || `Node ${node.index}`,
-        type: 'circle',
-        size: 40,
-        category: node.category,
-        index: node.index,
-        style: {
-            fill: categoryColors[node.category] || '#5B8FF9',
-            stroke: '#fff',
-            lineWidth: 2,
+        data: {
+            label: node.name || `Node ${node.index}`,
+            category: node.category,
+            index: node.index,
+            color: categoryColors[node.category] || '#5B8FF9',
         },
     };
     console.log('Created node:', nodeData);
@@ -39,7 +35,6 @@ function createEdgeData(link, idx) {
         id: `edge-${idx}`,
         source: `node-${link.source}`,
         target: `node-${link.target}`,
-        type: 'line',
     };
     console.log('Created edge:', edgeData);
     return edgeData;
@@ -49,44 +44,35 @@ function createEdgeData(link, idx) {
 function setupGraphEvents() {
     if (!graph) return;
     
-    // 监听布局完成事件
-    graph.on('afterlayout', () => {
-        console.log('Layout completed');
-        // 布局完成后停止布局计算
-        if (typeof graph.stopLayout === 'function') {
-            graph.stopLayout();
-        }
-    });
-    
     // 监听节点悬停
-    graph.on('node:mouseenter', (evt) => {
-        const { item } = evt;
-        if (!item) return;
+    graph.on('node:pointerenter', (evt) => {
+        const { target } = evt;
+        if (!target || !target.id) return;
         
-        console.log('Node mouseenter:', item);
+        console.log('Node pointerenter:', target.id);
         
         try {
-            const model = item.getModel();
+            const model = graph.getNodeData(target.id);
             showTooltip(evt, model);
             
             // 设置悬停状态
-            graph.setItemState(item, 'hover', true);
+            graph.setElementState(target.id, 'hover', true);
         } catch (e) {
             console.warn('Node hover error:', e);
         }
     });
 
-    graph.on('node:mouseleave', (evt) => {
-        const { item } = evt;
-        if (!item) return;
+    graph.on('node:pointerleave', (evt) => {
+        const { target } = evt;
+        if (!target || !target.id) return;
         
-        console.log('Node mouseleave:', item);
+        console.log('Node pointerleave:', target.id);
         
         try {
             hideTooltip();
             
             // 清除悬停状态
-            graph.setItemState(item, 'hover', false);
+            graph.setElementState(target.id, 'hover', false);
         } catch (e) {
             console.warn('Node leave error:', e);
         }
@@ -96,25 +82,12 @@ function setupGraphEvents() {
     graph.on('node:click', (evt) => {
         console.log('Node clicked:', evt);
     });
-    
-    // 监听节点拖拽
-    graph.on('node:dragstart', (evt) => {
-        console.log('Node drag start:', evt);
-    });
-    
-    graph.on('node:drag', (evt) => {
-        console.log('Node dragging:', evt);
-    });
-    
-    graph.on('node:dragend', (evt) => {
-        console.log('Node drag end:', evt);
-    });
 
     // 窗口大小调整
     window.addEventListener('resize', () => {
         if (graph) {
-            graph.setSize(document.getElementById('container').offsetWidth, 
-                         document.getElementById('container').offsetHeight);
+            const container = document.getElementById('container');
+            graph.setSize([container.offsetWidth, container.offsetHeight]);
         }
     });
 }
@@ -127,68 +100,39 @@ function initGraph() {
         container,
         width: container.offsetWidth,
         height: container.offsetHeight,
-        fitView: true,
-        fitViewPadding: [20, 20, 20, 20],
-        data: { nodes: [], edges: [] },  // 初始化空数据
-        modes: {
-            default: [
-                {
-                    type: 'drag-canvas',
-                    enableOptimize: true,
-                },
-                {
-                    type: 'zoom-canvas',
-                    enableOptimize: true,
-                },
-                {
-                    type: 'drag-element',
-                    enableOptimize: true,
-                },
-                'click-select',
-            ],
-        },
+        autoFit: 'view',
+        padding: [20, 20, 20, 20],
+        data: { nodes: [], edges: [] },
+        behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element'],
         layout: {
             type: 'dagre',
             rankdir: 'LR',
             nodesep: 80,
             ranksep: 150,
-            controlPoints: true,
         },
-        defaultNode: {
-            type: 'circle',
-            size: 40,
+        node: {
             style: {
+                size: 40,
                 fill: '#5B8FF9',
                 stroke: '#fff',
                 lineWidth: 2,
-            },
-            labelCfg: {
-                position: 'bottom',
-                offset: 5,
-                style: {
-                    fontSize: 12,
-                    fill: '#333',
-                    background: {
-                        fill: '#fff',
-                        padding: [4, 8],
-                        radius: 4,
-                        opacity: 0.9,
-                    },
-                },
+                labelText: (d) => d.data?.label || d.id,
+                labelPlacement: 'bottom',
+                labelOffsetY: 10,
+                labelFontSize: 12,
+                labelFill: '#333',
+                labelBackground: true,
+                labelBackgroundFill: '#fff',
+                labelBackgroundOpacity: 0.9,
+                labelBackgroundRadius: 4,
+                labelPadding: [4, 8],
             },
         },
-        defaultEdge: {
-            type: 'line',
+        edge: {
             style: {
                 stroke: '#99ADD1',
                 lineWidth: 2,
                 endArrow: true,
-            },
-        },
-        nodeStateStyles: {
-            hover: {
-                lineWidth: 4,
-                shadowBlur: 20,
             },
         },
     });
@@ -197,22 +141,26 @@ function initGraph() {
     
     // 设置事件
     setupGraphEvents();
+    
+    // 调用render
+    graph.render();
 }
 
 // 显示 Tooltip
 function showTooltip(evt, model) {
     const tooltip = document.getElementById('tooltip');
-    const categoryName = originalData?.categories[model.category]?.name || 'Unknown';
+    const category = model.data?.category;
+    const categoryName = originalData?.categories[category]?.name || 'Unknown';
     
     tooltip.innerHTML = `
-        <div><strong>${model.label || model.id}</strong></div>
+        <div><strong>${model.data?.label || model.id}</strong></div>
         <div style="margin-top: 4px; font-size: 12px; opacity: 0.9;">
             类型: ${categoryName}
         </div>
     `;
     
-    tooltip.style.left = evt.canvasX + 15 + 'px';
-    tooltip.style.top = evt.canvasY + 15 + 'px';
+    tooltip.style.left = evt.client.x + 15 + 'px';
+    tooltip.style.top = evt.client.y + 15 + 'px';
     tooltip.classList.add('show');
 }
 
@@ -295,118 +243,75 @@ function reloadGraphWithData(nodes, edges) {
     
     const container = document.getElementById('container');
     
+    // 构建布局配置
+    const layoutCfg = {
+        type: currentLayout || 'dagre',
+        ...layoutConfig,
+    };
+    
+    // 为不同布局类型设置默认参数
+    if (layoutCfg.type === 'dagre') {
+        if (!layoutCfg.rankdir) layoutCfg.rankdir = 'LR';
+        if (!layoutCfg.nodesep) layoutCfg.nodesep = 80;
+        if (!layoutCfg.ranksep) layoutCfg.ranksep = 150;
+    } else if (layoutCfg.type === 'force') {
+        layoutCfg.preventOverlap = true;
+        layoutCfg.nodeSize = 40;
+        if (!layoutCfg.linkDistance) layoutCfg.linkDistance = 250;
+        if (!layoutCfg.nodeStrength) layoutCfg.nodeStrength = 1000;
+        if (!layoutCfg.edgeStrength) layoutCfg.edgeStrength = 200;
+        if (layoutCfg.collideStrength === undefined) layoutCfg.collideStrength = 1;
+    } else if (layoutCfg.type === 'concentric') {
+        if (!layoutCfg.nodeSize) layoutCfg.nodeSize = 40;
+        if (!layoutCfg.nodeSpacing) layoutCfg.nodeSpacing = 50;
+        if (layoutCfg.preventOverlap === undefined) layoutCfg.preventOverlap = true;
+        if (layoutCfg.equidistant === undefined) layoutCfg.equidistant = false;
+    }
+    
     graph = new Graph({
         container,
         width: container.offsetWidth,
         height: container.offsetHeight,
-        fitView: true,
-        fitViewPadding: [20, 20, 20, 20],
+        autoFit: 'view',
+        padding: [20, 20, 20, 20],
         data: { nodes, edges },
-        // G6 5.x 的交互方式
-        modes: {
-            default: [
-                {
-                    type: 'drag-canvas',
-                    enableOptimize: true,
-                },
-                {
-                    type: 'zoom-canvas',
-                    enableOptimize: true,
-                },
-                {
-                    type: 'drag-element',  // G6 5.x 使用 drag-element 而不是 drag-node
-                    enableOptimize: true,
-                },
-                'click-select',
-            ],
-        },
-        // 使用更稳定的布局 - dagre 层次布局，避免颤动和重叠
-        layout: {
-            type: 'dagre',
-            rankdir: 'LR',  // 从左到右
-            nodesep: 80,    // 节点间距
-            ranksep: 150,   // 层级间距
-            controlPoints: true,
-        },
-        defaultNode: {
-            type: 'circle',
-            size: 40,
+        behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element'],
+        layout: layoutCfg,
+        node: {
             style: {
-                fill: '#5B8FF9',
+                size: 40,
+                fill: (d) => d.data?.color || categoryColors[d.data?.category] || '#5B8FF9',
                 stroke: '#fff',
                 lineWidth: 2,
-            },
-            labelCfg: {
-                position: 'bottom',
-                offset: 5,
-                style: {
-                    fontSize: 12,
-                    fill: '#333',
-                    background: {
-                        fill: '#fff',
-                        padding: [4, 8],
-                        radius: 4,
-                        opacity: 0.9,
-                    },
-                },
+                labelText: (d) => d.data?.label || d.id,
+                labelPlacement: 'bottom',
+                labelOffsetY: 10,
+                labelFontSize: 12,
+                labelFill: '#333',
+                labelBackground: true,
+                labelBackgroundFill: '#fff',
+                labelBackgroundOpacity: 0.9,
+                labelBackgroundRadius: 4,
+                labelPadding: [4, 8],
             },
         },
-        defaultEdge: {
-            type: 'line',
+        edge: {
             style: {
                 stroke: '#99ADD1',
                 lineWidth: 2,
                 endArrow: true,
             },
         },
-        nodeStateStyles: {
-            hover: {
-                lineWidth: 4,
-                shadowBlur: 20,
-            },
-        },
     });
     
     setupGraphEvents();
     
-    // 尝试显式渲染
-    console.log('Graph instance created:', graph);
-    console.log('Graph data:', { nodes, edges });
+    console.log('Graph instance created with data:', { nodes: nodes.length, edges: edges.length });
     
-    // 输出 graph 的所有方法
-    try {
-        const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(graph));
-        console.log('Graph available methods:', methods);
-    } catch (e) {
-        console.warn('Cannot get graph methods:', e);
-    }
+    // 调用 render 方法
+    graph.render();
     
-    // 检查是否有 render 方法
-    if (typeof graph.render === 'function') {
-        console.log('Calling graph.render()');
-        try {
-            graph.render().then(() => {
-                console.log('Graph rendered successfully');
-                // 渲染完成后等待一下布局
-                setTimeout(() => {
-                    console.log('Layout should be complete now');
-                    // 尝试自适应视图
-                    if (typeof graph.fitView === 'function') {
-                        graph.fitView();
-                    }
-                }, 1000);
-            }).catch(e => {
-                console.error('Render error:', e);
-            });
-        } catch (e) {
-            console.error('Render error:', e);
-        }
-    }
-    
-    // 不要调用 layout()，因为布局已经在配置中设置了
-    // layout 会自动执行
-    
-    console.log('Graph setup completed');
+    console.log('Graph rendered');
 }
 
 // 加载图谱数据
@@ -447,9 +352,10 @@ function updateStats() {
 // 布局配置参数映射
 const layoutParams = {
     force: [
-        { key: 'linkDistance', label: '连线距离', type: 'number', default: 150, min: 50, max: 500 },
-        { key: 'nodeStrength', label: '节点作用力', type: 'number', default: -300, min: -1000, max: 0 },
-        { key: 'edgeStrength', label: '边作用力', type: 'number', default: 0.6, min: 0, max: 1, step: 0.1 },
+        { key: 'linkDistance', label: '连线距离', type: 'number', default: 250, min: 50, max: 500 },
+        { key: 'nodeStrength', label: '节点斥力强度', type: 'number', default: 1000, min: 100, max: 5000 },
+        { key: 'edgeStrength', label: '边引力强度', type: 'number', default: 200, min: 50, max: 1000 },
+        { key: 'collideStrength', label: '碰撞强度', type: 'number', default: 1, min: 0, max: 1, step: 0.1 },
     ],
     dagre: [
         { key: 'rankdir', label: '方向', type: 'select', default: 'TB', options: ['TB', 'BT', 'LR', 'RL'] },
@@ -457,7 +363,7 @@ const layoutParams = {
         { key: 'ranksep', label: '层级间距', type: 'number', default: 50, min: 10, max: 200 },
     ],
     circular: [
-        { key: 'radius', label: '半径', type: 'number', default: 200, min: 100, max: 500 },
+        { key: 'radius', label: '半径', type: 'number', default: 500, min: 100, max: 1000 },
         { key: 'startAngle', label: '起始角度', type: 'number', default: 0, min: 0, max: 360 },
         { key: 'endAngle', label: '结束角度', type: 'number', default: 360, min: 0, max: 360 },
     ],
@@ -467,8 +373,10 @@ const layoutParams = {
         { key: 'nodeSep', label: '节点间距', type: 'number', default: 50, min: 10, max: 200 },
     ],
     concentric: [
-        { key: 'minNodeSpacing', label: '最小节点间距', type: 'number', default: 50, min: 10, max: 200 },
+        { key: 'nodeSize', label: '节点大小', type: 'number', default: 40, min: 10, max: 100 },
+        { key: 'nodeSpacing', label: '节点间距', type: 'number', default: 50, min: 10, max: 200 },
         { key: 'equidistant', label: '等距分布', type: 'checkbox', default: false },
+        { key: 'preventOverlap', label: '防止重叠', type: 'checkbox', default: true },
     ],
 };
 
@@ -552,11 +460,17 @@ document.getElementById('applyLayout').addEventListener('click', () => {
     if (currentLayout === 'force') {
         config.preventOverlap = true;
         config.nodeSize = 40;
+        // 如果没有设置参数，使用默认值
+        if (!config.linkDistance) config.linkDistance = 250;
+        if (!config.nodeStrength) config.nodeStrength = 1000;
+        if (!config.edgeStrength) config.edgeStrength = 200;
+        if (config.collideStrength === undefined) config.collideStrength = 1;
     }
     
     try {
         layoutConfig = config;
-        graph.updateLayout(config);
+        graph.setLayout(config);
+        graph.layout();
     } catch (error) {
         console.error('Layout error:', error);
         alert('布局应用失败: ' + error.message);
@@ -649,8 +563,9 @@ document.getElementById('searchNodes').addEventListener('click', () => {
             .map((link, idx) => createEdgeData(link, idx));
     } else {
         // 追加到现有画布
-        const currentNodes = graph.getNodes().map(node => node.getModel());
-        const currentEdges = graph.getEdges().map(edge => edge.getModel());
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        const currentEdges = currentData.edges || [];
         const existingNodeIds = new Set(currentNodes.map(n => n.id));
         const existingEdgeKeys = new Set(currentEdges.map(e => `${e.source}-${e.target}`));
 
@@ -659,7 +574,7 @@ document.getElementById('searchNodes').addEventListener('click', () => {
             .map(node => createNodeData(node));
 
         const allNodeIndices = new Set([
-            ...currentNodes.map(n => n.index),
+            ...currentNodes.map(n => n.data?.index),
             ...matchedNodes.map(n => n.index),
         ]);
 
@@ -678,7 +593,7 @@ document.getElementById('searchNodes').addEventListener('click', () => {
 });
 
 // 路径检索
-document.getElementById('searchPaths').addEventListener('click', () => {
+document.getElementById('searchPaths').addEventListener('click', async () => {
     if (!originalData) {
         alert('请先加载数据文件');
         return;
@@ -687,7 +602,7 @@ document.getElementById('searchPaths').addEventListener('click', () => {
     const startKeyword = document.getElementById('pathStart').value.trim().toLowerCase();
     const endKeyword = document.getElementById('pathEnd').value.trim().toLowerCase();
     const direction = document.getElementById('pathDirection').value;
-    const maxHops = parseInt(document.getElementById('maxHops').value) || Infinity;
+    const maxHops = parseInt(document.getElementById('maxHops').value) || 5; // 默认最大5跳，防止无限循环
     const clearBefore = document.getElementById('clearBeforeSearch').checked;
 
     if (!startKeyword || !endKeyword) {
@@ -704,104 +619,156 @@ document.getElementById('searchPaths').addEventListener('click', () => {
         return;
     }
 
-    // 构建邻接表
-    const adjList = {};
-    const reverseAdjList = {};
+    // 显示加载提示
+    const searchButton = document.getElementById('searchPaths');
+    const originalText = searchButton.textContent;
+    searchButton.textContent = '搜索中...';
+    searchButton.disabled = true;
 
-    originalData.nodes.forEach(node => {
-        adjList[node.index] = [];
-        reverseAdjList[node.index] = [];
-    });
+    // 使用 setTimeout 让浏览器渲染 UI
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-    originalData.links.forEach(link => {
-        adjList[link.source].push(link.target);
-        reverseAdjList[link.target].push(link.source);
-    });
+    try {
+        // 构建邻接表
+        const adjList = {};
+        const reverseAdjList = {};
 
-    // BFS 查找路径
-    const pathNodes = new Set();
-    const pathEdges = [];
-
-    startNodes.forEach(startNode => {
-        endNodes.forEach(endNode => {
-            const paths = findPaths(startNode.index, endNode.index, adjList, reverseAdjList, direction, maxHops);
-            paths.forEach(path => {
-                path.forEach((nodeIdx, i) => {
-                    pathNodes.add(nodeIdx);
-                    if (i < path.length - 1) {
-                        pathEdges.push({ source: nodeIdx, target: path[i + 1] });
-                    }
-                });
-            });
+        originalData.nodes.forEach(node => {
+            adjList[node.index] = [];
+            reverseAdjList[node.index] = [];
         });
-    });
 
-    if (pathNodes.size === 0) {
-        alert('未找到符合条件的路径');
-        return;
+        originalData.links.forEach(link => {
+            adjList[link.source].push(link.target);
+            reverseAdjList[link.target].push(link.source);
+        });
+
+        // BFS 查找路径
+        const pathNodes = new Set();
+        const pathEdgesSet = new Set(); // 使用 Set 去重
+
+        let pathCount = 0;
+        const MAX_PATHS = 100; // 限制最大路径数量，防止卡顿
+
+        for (const startNode of startNodes) {
+            for (const endNode of endNodes) {
+                if (pathCount >= MAX_PATHS) break;
+                
+                const paths = findPaths(startNode.index, endNode.index, adjList, reverseAdjList, direction, maxHops);
+                
+                for (const path of paths) {
+                    if (pathCount >= MAX_PATHS) break;
+                    pathCount++;
+                    
+                    for (let i = 0; i < path.length; i++) {
+                        pathNodes.add(path[i]);
+                        if (i < path.length - 1) {
+                            pathEdgesSet.add(`${path[i]}-${path[i + 1]}`);
+                        }
+                    }
+                }
+            }
+            if (pathCount >= MAX_PATHS) break;
+        }
+
+        if (pathNodes.size === 0) {
+            alert('未找到符合条件的路径');
+            return;
+        }
+
+        // 将 Set 转换为数组
+        const pathEdges = Array.from(pathEdgesSet).map(edge => {
+            const [source, target] = edge.split('-').map(Number);
+            return { source, target };
+        });
+
+        let nodes, edges;
+
+        if (clearBefore) {
+            nodes = originalData.nodes
+                .filter(node => pathNodes.has(node.index))
+                .map(node => createNodeData(node));
+
+            edges = pathEdges.map((edge, idx) => createEdgeData(edge, idx));
+        } else {
+            const currentData = graph.getData();
+            const currentNodes = currentData.nodes || [];
+            const currentEdges = currentData.edges || [];
+            const existingNodeIds = new Set(currentNodes.map(n => n.id));
+            const existingEdgeKeys = new Set(currentEdges.map(e => `${e.source}-${e.target}`));
+
+            const newNodes = originalData.nodes
+                .filter(node => pathNodes.has(node.index) && !existingNodeIds.has(`node-${node.index}`))
+                .map(node => createNodeData(node));
+
+            const newEdges = pathEdges
+                .filter(edge => !existingEdgeKeys.has(`node-${edge.source}-node-${edge.target}`))
+                .map((edge, idx) => createEdgeData(edge, `new-${idx}`));
+
+            nodes = [...currentNodes, ...newNodes];
+            edges = [...currentEdges, ...newEdges];
+        }
+
+        if (!graph) initGraph();
+        reloadGraphWithData(nodes, edges);
+        updateStats();
+        
+        if (pathCount >= MAX_PATHS) {
+            alert(`找到超过 ${MAX_PATHS} 条路径，已显示前 ${MAX_PATHS} 条。请缩小搜索范围或减少最大跳数。`);
+        }
+    } catch (error) {
+        console.error('Path search error:', error);
+        alert('路径搜索失败: ' + error.message);
+    } finally {
+        // 恢复按钮状态
+        searchButton.textContent = originalText;
+        searchButton.disabled = false;
     }
-
-    let nodes, edges;
-
-    if (clearBefore) {
-        nodes = originalData.nodes
-            .filter(node => pathNodes.has(node.index))
-            .map(node => createNodeData(node));
-
-        edges = pathEdges.map((edge, idx) => createEdgeData(edge, idx));
-    } else {
-        const currentData = graph.getData();
-        const currentNodes = currentData.nodes || [];
-        const currentEdges = currentData.edges || [];
-        const existingNodeIds = new Set(currentNodes.map(n => n.id));
-        const existingEdgeKeys = new Set(currentEdges.map(e => `${e.source}-${e.target}`));
-
-        const newNodes = originalData.nodes
-            .filter(node => pathNodes.has(node.index) && !existingNodeIds.has(`node-${node.index}`))
-            .map(node => createNodeData(node));
-
-        const newEdges = pathEdges
-            .filter(edge => !existingEdgeKeys.has(`node-${edge.source}-node-${edge.target}`))
-            .map((edge, idx) => createEdgeData(edge, `new-${idx}`));
-
-        nodes = [...currentNodes, ...newNodes];
-        edges = [...currentEdges, ...newEdges];
-    }
-
-    if (!graph) initGraph();
-    reloadGraphWithData(nodes, edges);
-    updateStats();
 });
 
-// BFS 查找路径
+// BFS 查找路径（优化版本）
 function findPaths(start, end, adjList, reverseAdjList, direction, maxHops) {
     const paths = [];
+    const MAX_PATHS_PER_PAIR = 20; // 每对起始-终点最多找20条路径
     
     const searchDirection = (fromNode, toNode, adjacency) => {
         const queue = [[fromNode]];
-        const visited = new Set();
+        const visited = new Map(); // 使用 Map 进行更高效的查找
+        let foundCount = 0;
         
-        while (queue.length > 0) {
+        while (queue.length > 0 && foundCount < MAX_PATHS_PER_PAIR) {
             const path = queue.shift();
             const current = path[path.length - 1];
             
+            // 检查是否超过最大跳数
             if (path.length > maxHops + 1) continue;
             
+            // 找到目标节点
             if (current === toNode) {
                 paths.push([...path]);
+                foundCount++;
                 continue;
             }
             
-            const key = path.join('-');
-            if (visited.has(key)) continue;
-            visited.add(key);
+            // 检查是否访问过该状态
+            const stateKey = `${current}-${path.length}`;
+            if (visited.has(stateKey)) continue;
+            visited.set(stateKey, true);
             
+            // 扩展邻居节点
             const neighbors = adjacency[current] || [];
-            neighbors.forEach(neighbor => {
+            for (const neighbor of neighbors) {
+                // 防止循环
                 if (!path.includes(neighbor)) {
                     queue.push([...path, neighbor]);
                 }
-            });
+            }
+            
+            // 限制队列大小，防止内存溢出
+            if (queue.length > 10000) {
+                console.warn('路径搜索队列过大，停止搜索');
+                break;
+            }
         }
     };
     
@@ -810,10 +777,12 @@ function findPaths(start, end, adjList, reverseAdjList, direction, maxHops) {
     } else if (direction === 'reverse') {
         searchDirection(start, end, reverseAdjList);
     } else if (direction === 'both') {
+        // 构建无向图邻接表
         const undirectedAdj = {};
         Object.keys(adjList).forEach(key => {
             const k = parseInt(key);
-            undirectedAdj[k] = [...(adjList[k] || []), ...(reverseAdjList[k] || [])];
+            const uniqueNeighbors = new Set([...(adjList[k] || []), ...(reverseAdjList[k] || [])]);
+            undirectedAdj[k] = Array.from(uniqueNeighbors);
         });
         searchDirection(start, end, undirectedAdj);
     }
