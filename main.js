@@ -219,6 +219,9 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
         loadGraphData(cleanedData);
         updateStats();
         
+        // 启用重新加载按钮
+        document.getElementById('reloadData').disabled = false;
+        
         const invalidEdges = data.links.length - cleanedData.links.length;
         const message = invalidEdges > 0 
             ? `成功加载 ${cleanedData.nodes.length} 个节点和 ${cleanedData.links.length} 条关系（过滤了 ${invalidEdges} 条无效关系）`
@@ -230,6 +233,23 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
         console.error('File parsing error:', error);
         alert('文件解析失败: ' + error.message);
     }
+});
+
+// 重新加载数据
+document.getElementById('reloadData').addEventListener('click', () => {
+    if (!originalData) {
+        alert('请先加载数据文件');
+        return;
+    }
+    
+    // 重新加载全部原始数据
+    loadGraphData(originalData);
+    updateStats();
+    
+    // 清除所有隐藏选项
+    document.querySelectorAll('.hide-category').forEach(cb => cb.checked = false);
+    
+    alert('数据已重新加载！');
 });
 
 // 重新加载图谱数据（通用方法）
@@ -280,14 +300,41 @@ function reloadGraphWithData(nodes, edges) {
         node: {
             style: {
                 size: 40,
-                fill: (d) => d.data?.color || categoryColors[d.data?.category] || '#5B8FF9',
-                stroke: '#fff',
-                lineWidth: 2,
+                fill: (d) => {
+                    // 如果节点被标记为高亮，使用高亮颜色
+                    if (d.data?.highlighted === true) {
+                        return '#FF6B6B'; // 高亮红色
+                    }
+                    // 如果被标记为非高亮，使用半透明颜色
+                    if (d.data?.highlighted === false) {
+                        const baseColor = d.data?.color || categoryColors[d.data?.category] || '#5B8FF9';
+                        return baseColor + '66'; // 添加40%透明度
+                    }
+                    // 默认情况
+                    return d.data?.color || categoryColors[d.data?.category] || '#5B8FF9';
+                },
+                stroke: (d) => {
+                    if (d.data?.highlighted === true) {
+                        return '#FF0000'; // 高亮边框
+                    }
+                    return '#fff';
+                },
+                lineWidth: (d) => {
+                    if (d.data?.highlighted === true) {
+                        return 3; // 高亮节点边框更粗
+                    }
+                    return 2;
+                },
                 labelText: (d) => d.data?.label || d.id,
                 labelPlacement: 'bottom',
                 labelOffsetY: 10,
                 labelFontSize: 12,
-                labelFill: '#333',
+                labelFill: (d) => {
+                    if (d.data?.highlighted === false) {
+                        return '#999'; // 非高亮节点的标签颜色变淡
+                    }
+                    return '#333';
+                },
                 labelBackground: true,
                 labelBackgroundFill: '#fff',
                 labelBackgroundOpacity: 0.9,
@@ -481,8 +528,19 @@ document.getElementById('applyLayout').addEventListener('click', () => {
 document.getElementById('clearEdges').addEventListener('click', () => {
     if (!graph || !originalData) return;
 
-    const nodes = originalData.nodes.map(node => createNodeData(node));
-    reloadGraphWithData(nodes, []);
+    const canvasControlScope = document.getElementById('canvasControlScope').checked;
+    
+    if (canvasControlScope) {
+        // 仅清空当前画布的关系，保留节点
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        reloadGraphWithData(currentNodes, []);
+    } else {
+        // 清空所有关系，加载所有节点
+        const nodes = originalData.nodes.map(node => createNodeData(node));
+        reloadGraphWithData(nodes, []);
+    }
+    
     updateStats();
 });
 
@@ -501,16 +559,28 @@ document.querySelectorAll('.hide-category').forEach(checkbox => {
         const hiddenCategories = Array.from(document.querySelectorAll('.hide-category:checked'))
             .map(cb => parseInt(cb.value));
 
-        const nodes = originalData.nodes
-            .filter(node => !hiddenCategories.includes(node.category))
-            .map(node => createNodeData(node));
+        // 获取当前画布数据
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        const currentEdges = currentData.edges || [];
+        
+        // 从当前画布中过滤出需要隐藏的节点
+        const hiddenNodeIds = new Set(
+            currentNodes
+                .filter(node => hiddenCategories.includes(node.data?.category))
+                .map(n => n.id)
+        );
+        
+        // 保留未被隐藏的节点
+        const visibleNodes = currentNodes.filter(node => !hiddenNodeIds.has(node.id));
+        
+        // 保留所有边，只要至少有一个端点可见
+        const visibleNodeIdSet = new Set(visibleNodes.map(n => n.id));
+        const visibleEdges = currentEdges.filter(edge => 
+            visibleNodeIdSet.has(edge.source) || visibleNodeIdSet.has(edge.target)
+        );
 
-        const visibleNodeIndices = new Set(nodes.map(n => n.index));
-        const edges = originalData.links
-            .filter(link => visibleNodeIndices.has(link.source) && visibleNodeIndices.has(link.target))
-            .map((link, idx) => createEdgeData(link, idx));
-
-        reloadGraphWithData(nodes, edges);
+        reloadGraphWithData(visibleNodes, visibleEdges);
         updateStats();
     });
 });
@@ -538,10 +608,28 @@ document.getElementById('searchNodes').addEventListener('click', () => {
     }
 
     const clearBefore = document.getElementById('clearBeforeSearch').checked;
+    const searchScope = document.getElementById('searchScope').checked; // 仅对当前画布
     const keywordList = keywords.toLowerCase().split(/\s+/);
 
+    // 根据选项决定搜索范围
+    let sourceNodes;
+    if (searchScope && graph) {
+        // 仅搜索当前画布中的节点
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        sourceNodes = currentNodes
+            .map(n => {
+                // 找到对应的原始节点数据
+                return originalData.nodes.find(node => node.index === n.data?.index);
+            })
+            .filter(node => node !== undefined);
+    } else {
+        // 搜索全部数据
+        sourceNodes = originalData.nodes;
+    }
+
     // 过滤节点
-    const matchedNodes = originalData.nodes.filter(node => {
+    const matchedNodes = sourceNodes.filter(node => {
         const nodeName = node.name.toLowerCase();
         return keywordList.every(kw => nodeName.includes(kw));
     });
@@ -562,12 +650,14 @@ document.getElementById('searchNodes').addEventListener('click', () => {
             .filter(link => matchedIndices.has(link.source) && matchedIndices.has(link.target))
             .map((link, idx) => createEdgeData(link, idx));
     } else {
-        // 追加到现有画布
+        // 追加到现有画布，并高亮匹配的节点
         const currentData = graph.getData();
         const currentNodes = currentData.nodes || [];
         const currentEdges = currentData.edges || [];
         const existingNodeIds = new Set(currentNodes.map(n => n.id));
         const existingEdgeKeys = new Set(currentEdges.map(e => `${e.source}-${e.target}`));
+        
+        const matchedNodeIds = new Set(matchedNodes.map(n => `node-${n.index}`));
 
         const newNodes = matchedNodes
             .filter(node => !existingNodeIds.has(`node-${node.index}`))
@@ -583,7 +673,36 @@ document.getElementById('searchNodes').addEventListener('click', () => {
             .filter(link => !existingEdgeKeys.has(`node-${link.source}-node-${link.target}`))
             .map((link, idx) => createEdgeData(link, `new-${idx}`));
 
-        nodes = [...currentNodes, ...newNodes];
+        // 合并节点，为匹配节点添加高亮样式
+        nodes = currentNodes.map(node => {
+            if (matchedNodeIds.has(node.id)) {
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        highlighted: true,
+                    }
+                };
+            } else {
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        highlighted: false,
+                    }
+                };
+            }
+        });
+        
+        // 添加新节点，标记为高亮
+        nodes = [...nodes, ...newNodes.map(node => ({
+            ...node,
+            data: {
+                ...node.data,
+                highlighted: true,
+            }
+        }))];
+        
         edges = [...currentEdges, ...newEdges];
     }
 
@@ -604,15 +723,36 @@ document.getElementById('searchPaths').addEventListener('click', async () => {
     const direction = document.getElementById('pathDirection').value;
     const maxHops = parseInt(document.getElementById('maxHops').value) || 5; // 默认最大5跳，防止无限循环
     const clearBefore = document.getElementById('clearBeforeSearch').checked;
+    const searchScope = document.getElementById('searchScope').checked; // 仅对当前画布
 
     if (!startKeyword || !endKeyword) {
         alert('请输入起始和目标节点关键词');
         return;
     }
 
+    // 根据选项决定搜索范围
+    let sourceNodes, sourceLinks;
+    if (searchScope && graph) {
+        // 仅搜索当前画布中的节点和边
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        const currentEdges = currentData.edges || [];
+        
+        const currentNodeIndices = new Set(currentNodes.map(n => n.data?.index));
+        
+        sourceNodes = originalData.nodes.filter(node => currentNodeIndices.has(node.index));
+        sourceLinks = originalData.links.filter(link => 
+            currentNodeIndices.has(link.source) && currentNodeIndices.has(link.target)
+        );
+    } else {
+        // 搜索全部数据
+        sourceNodes = originalData.nodes;
+        sourceLinks = originalData.links;
+    }
+
     // 查找匹配的起始和目标节点
-    const startNodes = originalData.nodes.filter(n => n.name.toLowerCase().includes(startKeyword));
-    const endNodes = originalData.nodes.filter(n => n.name.toLowerCase().includes(endKeyword));
+    const startNodes = sourceNodes.filter(n => n.name.toLowerCase().includes(startKeyword));
+    const endNodes = sourceNodes.filter(n => n.name.toLowerCase().includes(endKeyword));
 
     if (startNodes.length === 0 || endNodes.length === 0) {
         alert('未找到匹配的起始或目标节点');
@@ -629,16 +769,16 @@ document.getElementById('searchPaths').addEventListener('click', async () => {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-        // 构建邻接表
+        // 构建邻接表（仅使用搜索范围内的边）
         const adjList = {};
         const reverseAdjList = {};
 
-        originalData.nodes.forEach(node => {
+        sourceNodes.forEach(node => {
             adjList[node.index] = [];
             reverseAdjList[node.index] = [];
         });
 
-        originalData.links.forEach(link => {
+        sourceLinks.forEach(link => {
             adjList[link.source].push(link.target);
             reverseAdjList[link.target].push(link.source);
         });
