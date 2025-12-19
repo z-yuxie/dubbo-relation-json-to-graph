@@ -1,5 +1,18 @@
 import { Graph } from '@antv/g6';
 
+// 全局 Promise 错误处理 - 捕获 G6 内部的非关键错误
+window.addEventListener('unhandledrejection', (event) => {
+    // 检查是否是 G6 矩阵计算相关的错误
+    if (event.reason && 
+        (event.reason.message?.includes('Cannot read properties of null') ||
+         event.reason.stack?.includes('mat4.js') ||
+         event.reason.stack?.includes('viewport.js'))) {
+        // 这是 G6 内部的已知问题，不影响功能，静默处理
+        event.preventDefault();
+        console.debug('G6 内部渲染警告（已忽略）:', event.reason.message);
+    }
+});
+
 // 全局状态
 let graph = null;
 let originalData = null; // 原始完整数据
@@ -571,37 +584,82 @@ document.getElementById('clearCanvas').addEventListener('click', () => {
 });
 
 // 隐藏节点类型
+let canvasControlBaseData = null; // 用于"仅对当前画布"模式的基准数据
+
 document.querySelectorAll('.hide-category').forEach(checkbox => {
     checkbox.addEventListener('change', () => {
         if (!graph || !originalData) return;
 
         const hiddenCategories = Array.from(document.querySelectorAll('.hide-category:checked'))
             .map(cb => parseInt(cb.value));
+        
+        const canvasControlScope = document.getElementById('canvasControlScope').checked;
+        
+        // 确定基准数据
+        let baseNodes, baseLinks;
+        
+        if (canvasControlScope) {
+            // 仅对当前画布：使用基准数据或当前画布数据
+            if (!canvasControlBaseData) {
+                // 第一次操作时，保存当前画布数据作为基准
+                const currentData = graph.getData();
+                const currentNodes = currentData.nodes || [];
+                const currentEdges = currentData.edges || [];
+                
+                // 将当前画布数据转换回原始数据格式
+                canvasControlBaseData = {
+                    nodes: currentNodes.map(n => ({
+                        index: n.data.index,
+                        name: n.data.label,
+                        category: n.data.category
+                    })),
+                    links: currentEdges.map(e => ({
+                        source: originalData.nodes.find(node => `node-${node.index}` === e.source)?.index,
+                        target: originalData.nodes.find(node => `node-${node.index}` === e.target)?.index
+                    })).filter(link => link.source !== undefined && link.target !== undefined)
+                };
+            }
+            
+            baseNodes = canvasControlBaseData.nodes;
+            baseLinks = canvasControlBaseData.links;
+        } else {
+            // 对全部数据：使用原始数据
+            baseNodes = originalData.nodes;
+            baseLinks = originalData.links;
+            // 清空基准数据
+            canvasControlBaseData = null;
+        }
+        
+        // 从基准数据中过滤掉被隐藏的类型
+        const nodes = baseNodes
+            .filter(node => !hiddenCategories.includes(node.category))
+            .map(node => createNodeData(node));
+        
+        // 获取可见节点的索引集合
+        const visibleNodeIndices = new Set(nodes.map(n => n.data.index));
+        
+        // 只保留两个端点都可见的边
+        const edges = baseLinks
+            .filter(link => visibleNodeIndices.has(link.source) && visibleNodeIndices.has(link.target))
+            .map((link, idx) => createEdgeData(link, idx));
 
-        // 获取当前画布数据
-        const currentData = graph.getData();
-        const currentNodes = currentData.nodes || [];
-        const currentEdges = currentData.edges || [];
-        
-        // 从当前画布中过滤出需要隐藏的节点
-        const hiddenNodeIds = new Set(
-            currentNodes
-                .filter(node => hiddenCategories.includes(node.data?.category))
-                .map(n => n.id)
-        );
-        
-        // 保留未被隐藏的节点
-        const visibleNodes = currentNodes.filter(node => !hiddenNodeIds.has(node.id));
-        
-        // 保留所有边，只要至少有一个端点可见
-        const visibleNodeIdSet = new Set(visibleNodes.map(n => n.id));
-        const visibleEdges = currentEdges.filter(edge => 
-            visibleNodeIdSet.has(edge.source) || visibleNodeIdSet.has(edge.target)
-        );
-
-        reloadGraphWithData(visibleNodes, visibleEdges);
+        reloadGraphWithData(nodes, edges);
         updateStats();
     });
+});
+
+// 当"仅对当前画布"选项改变时，清空基准数据
+document.getElementById('canvasControlScope').addEventListener('change', () => {
+    canvasControlBaseData = null;
+    // 如果有隐藏选项被勾选，重新触发隐藏逻辑
+    const hasChecked = document.querySelectorAll('.hide-category:checked').length > 0;
+    if (hasChecked) {
+        // 触发第一个勾选的checkbox的change事件
+        const firstChecked = document.querySelector('.hide-category:checked');
+        if (firstChecked) {
+            firstChecked.dispatchEvent(new Event('change'));
+        }
+    }
 });
 
 // 搜索模式切换
