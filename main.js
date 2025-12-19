@@ -95,6 +95,23 @@ function setupGraphEvents() {
     graph.on('node:click', (evt) => {
         console.log('Node clicked:', evt);
     });
+    
+    // 监听节点右键
+    graph.on('node:contextmenu', (evt) => {
+        evt.preventDefault();
+        showNodeContextMenu(evt);
+    });
+    
+    // 监听边右键
+    graph.on('edge:contextmenu', (evt) => {
+        evt.preventDefault();
+        showEdgeContextMenu(evt);
+    });
+    
+    // 监听画布点击，隐藏右键菜单
+    graph.on('canvas:click', () => {
+        hideContextMenus();
+    });
 
     // 窗口大小调整
     window.addEventListener('resize', () => {
@@ -1076,5 +1093,263 @@ function findPaths(start, end, adjList, reverseAdjList, direction, maxHops) {
 // 初始化布局参数
 renderLayoutParams();
 
+// ===== 右键菜单功能 =====
+
+// 全局变量：当前右键点击的元素
+let contextMenuTarget = null;
+
+// 隐藏所有右键菜单
+function hideContextMenus() {
+    document.getElementById('nodeContextMenu').style.display = 'none';
+    document.getElementById('edgeContextMenu').style.display = 'none';
+    contextMenuTarget = null;
+}
+
+// 显示节点右键菜单
+function showNodeContextMenu(evt) {
+    hideContextMenus();
+    
+    const menu = document.getElementById('nodeContextMenu');
+    contextMenuTarget = evt.target;
+    
+    // 设置菜单位置
+    menu.style.left = evt.client.x + 'px';
+    menu.style.top = evt.client.y + 'px';
+    menu.style.display = 'block';
+}
+
+// 显示边右键菜单
+function showEdgeContextMenu(evt) {
+    hideContextMenus();
+    
+    const menu = document.getElementById('edgeContextMenu');
+    contextMenuTarget = evt.target;
+    
+    // 设置菜单位置
+    menu.style.left = evt.client.x + 'px';
+    menu.style.top = evt.client.y + 'px';
+    menu.style.display = 'block';
+}
+
+// 隐藏边（关系）
+document.getElementById('hideEdge').addEventListener('click', () => {
+    if (!contextMenuTarget || !graph) return;
+    
+    try {
+        const edgeId = contextMenuTarget.id;
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        const currentEdges = currentData.edges || [];
+        
+        // 过滤掉被选中的边
+        const filteredEdges = currentEdges.filter(edge => edge.id !== edgeId);
+        
+        reloadGraphWithData(currentNodes, filteredEdges);
+        updateStats();
+        hideContextMenus();
+    } catch (e) {
+        console.error('Hide edge error:', e);
+        alert('隐藏关系失败: ' + e.message);
+    }
+});
+
+// 隐藏节点及关联关系
+document.getElementById('hideNode').addEventListener('click', () => {
+    if (!contextMenuTarget || !graph) return;
+    
+    try {
+        const nodeId = contextMenuTarget.id;
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        const currentEdges = currentData.edges || [];
+        
+        // 过滤掉被选中的节点
+        const filteredNodes = currentNodes.filter(node => node.id !== nodeId);
+        
+        // 过滤掉与该节点相关的边
+        const filteredEdges = currentEdges.filter(edge => 
+            edge.source !== nodeId && edge.target !== nodeId
+        );
+        
+        reloadGraphWithData(filteredNodes, filteredEdges);
+        updateStats();
+        hideContextMenus();
+    } catch (e) {
+        console.error('Hide node error:', e);
+        alert('隐藏节点失败: ' + e.message);
+    }
+});
+
+// 从节点过滤路径
+document.getElementById('filterFromNode').addEventListener('click', () => {
+    if (!contextMenuTarget || !graph) return;
+    
+    try {
+        const nodeId = contextMenuTarget.id;
+        const nodeData = graph.getNodeData(nodeId);
+        
+        // 设置弹窗中的起始节点
+        document.getElementById('filterStartNode').value = nodeData.data.label;
+        document.getElementById('filterStartNode').dataset.nodeId = nodeId;
+        document.getElementById('filterStartNode').dataset.nodeIndex = nodeData.data.index;
+        
+        // 显示弹窗
+        document.getElementById('pathFilterModal').style.display = 'flex';
+        hideContextMenus();
+    } catch (e) {
+        console.error('Filter from node error:', e);
+        alert('打开过滤弹窗失败: ' + e.message);
+    }
+});
+
+// 关闭路径过滤弹窗
+function closePathFilterModal() {
+    document.getElementById('pathFilterModal').style.display = 'none';
+}
+
+document.getElementById('closePathFilterModal').addEventListener('click', closePathFilterModal);
+document.getElementById('cancelPathFilter').addEventListener('click', closePathFilterModal);
+
+// 应用路径过滤
+document.getElementById('applyPathFilter').addEventListener('click', async () => {
+    const startNodeIndex = parseInt(document.getElementById('filterStartNode').dataset.nodeIndex);
+    const direction = document.getElementById('filterDirection').value;
+    const maxHops = parseInt(document.getElementById('filterMaxHops').value);
+    const displayMode = document.querySelector('input[name="filterDisplayMode"]:checked').value;
+    
+    if (isNaN(startNodeIndex)) {
+        alert('无效的起始节点');
+        return;
+    }
+    
+    try {
+        // 获取当前画布数据
+        const currentData = graph.getData();
+        const currentNodes = currentData.nodes || [];
+        const currentEdges = currentData.edges || [];
+        
+        const currentNodeIndices = new Set(currentNodes.map(n => n.data?.index));
+        
+        // 从原始数据中获取当前画布的节点和边
+        const sourceNodes = originalData.nodes.filter(node => currentNodeIndices.has(node.index));
+        const sourceLinks = originalData.links.filter(link => 
+            currentNodeIndices.has(link.source) && currentNodeIndices.has(link.target)
+        );
+        
+        // 构建邻接表
+        const adjList = {};
+        const reverseAdjList = {};
+        
+        sourceNodes.forEach(node => {
+            adjList[node.index] = [];
+            reverseAdjList[node.index] = [];
+        });
+        
+        sourceLinks.forEach(link => {
+            adjList[link.source].push(link.target);
+            reverseAdjList[link.target].push(link.source);
+        });
+        
+        // 根据方向选择邻接表
+        let selectedAdjList;
+        if (direction === 'outgoing') {
+            selectedAdjList = adjList;
+        } else if (direction === 'incoming') {
+            selectedAdjList = reverseAdjList;
+        } else { // both
+            // 构建无向图邻接表
+            selectedAdjList = {};
+            Object.keys(adjList).forEach(key => {
+                const k = parseInt(key);
+                const uniqueNeighbors = new Set([...(adjList[k] || []), ...(reverseAdjList[k] || [])]);
+                selectedAdjList[k] = Array.from(uniqueNeighbors);
+            });
+        }
+        
+        // BFS 查找指定跳数内可达的节点
+        const reachableNodes = new Set([startNodeIndex]);
+        const queue = [{ nodeIndex: startNodeIndex, hops: 0 }];
+        const visited = new Set([startNodeIndex]);
+        
+        while (queue.length > 0) {
+            const { nodeIndex, hops } = queue.shift();
+            
+            if (hops >= maxHops) continue;
+            
+            const neighbors = selectedAdjList[nodeIndex] || [];
+            for (const neighbor of neighbors) {
+                if (!visited.has(neighbor)) {
+                    visited.add(neighbor);
+                    reachableNodes.add(neighbor);
+                    queue.push({ nodeIndex: neighbor, hops: hops + 1 });
+                }
+            }
+        }
+        
+        // 根据显示模式处理
+        if (displayMode === 'highlight') {
+            // 高亮模式：保留所有节点，高亮匹配的
+            const nodes = currentNodes.map(node => {
+                const isReachable = reachableNodes.has(node.data.index);
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        highlighted: isReachable,
+                    }
+                };
+            });
+            
+            const edges = currentEdges.map(edge => {
+                const sourceIndex = sourceNodes.find(n => `node-${n.index}` === edge.source)?.index;
+                const targetIndex = sourceNodes.find(n => `node-${n.index}` === edge.target)?.index;
+                const isReachable = reachableNodes.has(sourceIndex) && reachableNodes.has(targetIndex);
+                return {
+                    ...edge,
+                    data: {
+                        ...edge.data,
+                        highlighted: isReachable,
+                    }
+                };
+            });
+            
+            reloadGraphWithData(nodes, edges);
+        } else {
+            // 隐藏其他模式：只显示匹配的节点和边
+            const nodes = currentNodes.filter(node => reachableNodes.has(node.data.index));
+            const nodeIdSet = new Set(nodes.map(n => n.id));
+            const edges = currentEdges.filter(edge => 
+                nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target)
+            );
+            
+            reloadGraphWithData(nodes, edges);
+        }
+        
+        updateStats();
+        closePathFilterModal();
+        
+        const resultMsg = displayMode === 'highlight' 
+            ? `已高亮 ${reachableNodes.size} 个可达节点`
+            : `已过滤出 ${reachableNodes.size} 个可达节点`;
+        console.log(resultMsg);
+        
+    } catch (e) {
+        console.error('Apply path filter error:', e);
+        alert('应用过滤失败: ' + e.message);
+    }
+});
+
+// 点击弹窗背景关闭
+document.getElementById('pathFilterModal').addEventListener('click', (e) => {
+    if (e.target.id === 'pathFilterModal') {
+        closePathFilterModal();
+    }
+});
+
+// 页面点击隐藏右键菜单
+document.addEventListener('click', () => {
+    hideContextMenus();
+});
+
 // 页面加载完成提示
-console.log('Dubbo 拓扑图谱可视化工具已就绪');
+console.log('Dubbo 拓扑图谱可视化工具已就绪（包含右键菜单功能）');

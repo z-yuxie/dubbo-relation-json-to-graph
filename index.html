@@ -165,6 +165,68 @@
         <div class="graph-container">
             <div id="container"></div>
             <div id="tooltip" class="tooltip"></div>
+            
+            <!-- 节点右键菜单 -->
+            <div id="nodeContextMenu" class="context-menu" style="display: none;">
+                <div class="context-menu-item" id="hideNode">
+                    <span>🚫 隐藏此节点及关联关系</span>
+                </div>
+                <div class="context-menu-item" id="filterFromNode">
+                    <span>🔍 从此节点过滤路径...</span>
+                </div>
+            </div>
+            
+            <!-- 边右键菜单 -->
+            <div id="edgeContextMenu" class="context-menu" style="display: none;">
+                <div class="context-menu-item" id="hideEdge">
+                    <span>🚫 隐藏此关系</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 路径过滤弹窗 -->
+    <div id="pathFilterModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔍 路径过滤</h3>
+                <span class="close-modal" id="closePathFilterModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>起始节点</label>
+                    <input type="text" id="filterStartNode" readonly />
+                </div>
+                <div class="form-group">
+                    <label>路径方向</label>
+                    <select id="filterDirection">
+                        <option value="outgoing">向外（从当前节点出发）</option>
+                        <option value="incoming">向内（指向当前节点）</option>
+                        <option value="both">双向（不考虑方向）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>最大跳数</label>
+                    <input type="number" id="filterMaxHops" value="2" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label>显示模式</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="filterDisplayMode" value="highlight" checked />
+                            高亮筛选结果
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="filterDisplayMode" value="hideOthers" />
+                            隐藏其他无关数据
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelPathFilter">取消</button>
+                <button class="btn-primary" id="applyPathFilter">应用过滤</button>
+            </div>
         </div>
     </div>
 
