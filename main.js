@@ -746,8 +746,14 @@ document.getElementById('searchNodes').addEventListener('click', () => {
     } else {
         // 追加到现有画布，并高亮匹配的节点
         const currentData = graph.getData();
-        const currentNodes = currentData.nodes || [];
-        const currentEdges = currentData.edges || [];
+        let currentNodes = currentData.nodes || [];
+        let currentEdges = currentData.edges || [];
+        
+        // 清除所有高亮状态
+        const cleared = clearHighlightState(currentNodes, currentEdges);
+        currentNodes = cleared.nodes;
+        currentEdges = cleared.edges;
+        
         const existingNodeIds = new Set(currentNodes.map(n => n.id));
         const existingEdgeKeys = new Set(currentEdges.map(e => `${e.source}-${e.target}`));
         
@@ -797,6 +803,7 @@ document.getElementById('searchNodes').addEventListener('click', () => {
             }
         }))];
         
+        // 合并边，所有边都不高亮（只高亮节点）
         edges = [...currentEdges, ...newEdges];
     }
 
