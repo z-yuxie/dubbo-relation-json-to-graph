@@ -183,14 +183,29 @@ function showTooltip(evt, model) {
     const categoryName = originalData?.categories[category]?.name || 'Unknown';
     
     tooltip.innerHTML = `
-        <div><strong>${model.data?.label || model.id}</strong></div>
+        <div><strong>${model.data?.label || model.id}</strong>
         <div style="margin-top: 4px; font-size: 12px; opacity: 0.9;">
             类型: ${categoryName}
         </div>
     `;
     
-    tooltip.style.left = evt.client.x + 15 + 'px';
-    tooltip.style.top = evt.client.y + 15 + 'px';
+    // 获取容器位置
+    const container = document.getElementById('container');
+    const containerRect = container.getBoundingClientRect();
+    
+    // 尝试使用原生事件
+    let pageX, pageY;
+    if (evt.originalEvent) {
+        pageX = evt.originalEvent.pageX;
+        pageY = evt.originalEvent.pageY;
+    } else {
+        pageX = evt.client.x;
+        pageY = evt.client.y;
+    }
+    
+    // 直接减去容器的左偏移量
+    tooltip.style.left = (pageX - containerRect.left) + 15 + 'px';
+    tooltip.style.top = (pageY - containerRect.top) + 15 + 'px';
     tooltip.classList.add('show');
 }
 
@@ -1140,9 +1155,22 @@ function showNodeContextMenu(evt) {
     const menu = document.getElementById('nodeContextMenu');
     contextMenuTarget = evt.target;
     
-    // 设置菜单位置
-    menu.style.left = evt.client.x + 'px';
-    menu.style.top = evt.client.y + 'px';
+    // 获取容器位置
+    const container = document.getElementById('container');
+    const containerRect = container.getBoundingClientRect();
+    
+    let pageX, pageY;
+    if (evt.originalEvent) {
+        pageX = evt.originalEvent.pageX;
+        pageY = evt.originalEvent.pageY;
+    } else {
+        pageX = evt.client.x;
+        pageY = evt.client.y;
+    }
+    
+    // 直接减去容器的左偏移量
+    menu.style.left = (pageX - containerRect.left) + 'px';
+    menu.style.top = (pageY - containerRect.top) + 'px';
     menu.style.display = 'block';
 }
 
@@ -1153,9 +1181,22 @@ function showEdgeContextMenu(evt) {
     const menu = document.getElementById('edgeContextMenu');
     contextMenuTarget = evt.target;
     
-    // 设置菜单位置
-    menu.style.left = evt.client.x + 'px';
-    menu.style.top = evt.client.y + 'px';
+    // 获取容器位置
+    const container = document.getElementById('container');
+    const containerRect = container.getBoundingClientRect();
+    
+    let pageX, pageY;
+    if (evt.originalEvent) {
+        pageX = evt.originalEvent.pageX;
+        pageY = evt.originalEvent.pageY;
+    } else {
+        pageX = evt.client.x;
+        pageY = evt.client.y;
+    }
+    
+    // 直接减去容器的左偏移量
+    menu.style.left = (pageX - containerRect.left) + 'px';
+    menu.style.top = (pageY - containerRect.top) + 'px';
     menu.style.display = 'block';
 }
 
