@@ -1225,8 +1225,25 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
     try {
         // 获取当前画布数据
         const currentData = graph.getData();
-        const currentNodes = currentData.nodes || [];
-        const currentEdges = currentData.edges || [];
+        let currentNodes = currentData.nodes || [];
+        let currentEdges = currentData.edges || [];
+        
+        // 清除所有节点和边的高亮状态（移除 highlighted 属性）
+        currentNodes = currentNodes.map(node => {
+            const { highlighted, ...restData } = node.data || {};
+            return {
+                ...node,
+                data: restData
+            };
+        });
+        
+        currentEdges = currentEdges.map(edge => {
+            const { highlighted, ...restData } = edge.data || {};
+            return {
+                ...edge,
+                data: restData
+            };
+        });
         
         const currentNodeIndices = new Set(currentNodes.map(n => n.data?.index));
         
