@@ -1,0 +1,55 @@
+# 依赖目录
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# 构建产物
+dist
+build
+
+# 开发工具
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 文档和示例（保留 demo.json）
+README.md
+*.md
+!demo.json
+
+# 图片（README中的截图不需要打包到容器）
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# 测试文件
+*.test.js
+*.spec.js
+coverage
+
+# 临时文件
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# 环境配置
+.env
+.env.local
+.env.*.local
+

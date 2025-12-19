@@ -92,6 +92,66 @@
 
 ## 快速开始
 
+### 方式一：使用 Docker（推荐）
+
+#### 前置要求
+- 安装 [Docker](https://www.docker.com/get-started)
+- 安装 [Docker Compose](https://docs.docker.com/compose/install/)（Docker Desktop 已包含）
+
+#### 快速启动
+
+**使用启动脚本（最简单）**
+
+Linux/macOS:
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+Windows:
+```cmd
+start.bat
+```
+
+**手动命令**
+
+```bash
+# 克隆项目
+git clone <repository-url>
+cd dubbo-relation-json-to-graph
+
+# 使用 docker-compose 启动（推荐）
+docker-compose up -d
+
+# 或直接使用 Docker
+docker build -t dubbo-topology .
+docker run -d -p 3000:80 --name dubbo-topology-viewer dubbo-topology
+```
+
+浏览器访问 http://localhost:3000
+
+#### Docker 常用命令
+
+```bash
+# 查看容器日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 重新构建并启动
+docker-compose up -d --build
+
+# 进入容器
+docker exec -it dubbo-topology-viewer sh
+```
+
+### 方式二：本地开发环境
+
+#### 前置要求
+- Node.js >= 16.0.0
+- npm >= 7.0.0
+
 ### 安装依赖
 
 ```bash
@@ -223,8 +283,72 @@ dubbo-relation-json-to-graph/
 ├── demo.json           # 示例数据文件
 ├── package.json        # 项目依赖配置
 ├── vite.config.js      # Vite 开发服务器配置
+├── Dockerfile          # Docker 镜像构建文件
+├── docker-compose.yml  # Docker Compose 配置文件
+├── nginx.conf          # Nginx 服务器配置
+├── .dockerignore       # Docker 构建忽略文件
+├── start.sh            # Linux/macOS 快速启动脚本
+├── start.bat           # Windows 快速启动脚本
 └── .gitignore          # Git 版本控制忽略文件
 ```
+
+## Docker 部署说明
+
+### 构建策略
+项目使用**多阶段构庻**，优化镜像大小：
+
+1. **构庻阶段** (node:18-alpine)
+   - 安装项目依赖
+   - 执行 Vite 构建，生成静态文件
+   
+2. **生产阶段** (nginx:alpine)
+   - 使用轻量级 Nginx 提供静态文件服务
+   - 最终镜像大小约 20-30MB
+
+### 端口配置
+- 容器内部端口：80
+- 对外映射端口：3000（可修改 docker-compose.yml 中的 ports 配置）
+
+### 环境变量
+当前无需额外环境变量，所有配置均为静态构建。
+
+### 性能优化
+- **Gzip 压缩**：启用 JS/CSS/JSON 等文件压缩
+- **静态资源缓存**：1年缓存期，提升加载速度
+- **安全头部**：添加 X-Frame-Options、X-XSS-Protection 等安全头
+
+### 生产环境部署建议
+
+1. **使用反向代理**：建议在生产环境中使用 Nginx 或 Traefik 作为反向代理
+2. **HTTPS 配置**：使用 Let's Encrypt 配置 SSL 证书
+3. **资源限制**：通过 docker-compose 设置内存和 CPU 限制
+
+```yaml
+services:
+  dubbo-topology:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+```
+
+### 故障排除
+
+**问题：容器启动但无法访问**
+- 检查端口映射：`docker ps` 查看端口是否正确
+- 检查防火墙：确保 3000 端口允许访问
+
+**问题：构建失败**
+- 检查 Docker 版本：确保 Docker >= 20.10
+- 清理缓存：`docker system prune -a`
+
+**问题：页面白屏**
+- 查看容器日志：`docker logs dubbo-topology-viewer`
+- 检查 Nginx 配置：`docker exec dubbo-topology-viewer cat /etc/nginx/conf.d/default.conf`
 
 ## 核心特性说明
 

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  dubbo-topology:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dubbo-topology-viewer
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    networks:
+      - dubbo-network
+    labels:
+      - "com.dubbo.description=Dubbo Topology Visualization Tool"
+      - "com.dubbo.version=1.0.0"
+
+networks:
+  dubbo-network:
+    driver: bridge
