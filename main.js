@@ -1350,8 +1350,9 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
             });
         }
         
-        // BFS 查找指定跳数内可达的节点
+        // BFS 查找指定跳数内可达的节点和边
         const reachableNodes = new Set([startNodeIndex]);
+        const reachableEdges = new Set(); // 记录在路径上的边
         const queue = [{ nodeIndex: startNodeIndex, hops: 0 }];
         const visited = new Set([startNodeIndex]);
         
@@ -1366,6 +1367,19 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
                     visited.add(neighbor);
                     reachableNodes.add(neighbor);
                     queue.push({ nodeIndex: neighbor, hops: hops + 1 });
+                    
+                    // 根据方向记录边
+                    if (direction === 'outgoing') {
+                        // 向外：记录 nodeIndex -> neighbor
+                        reachableEdges.add(`${nodeIndex}-${neighbor}`);
+                    } else if (direction === 'incoming') {
+                        // 向内：记录 neighbor -> nodeIndex
+                        reachableEdges.add(`${neighbor}-${nodeIndex}`);
+                    } else {
+                        // 双向：记录两个方向
+                        reachableEdges.add(`${nodeIndex}-${neighbor}`);
+                        reachableEdges.add(`${neighbor}-${nodeIndex}`);
+                    }
                 }
             }
         }
@@ -1387,7 +1401,9 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
             const edges = currentEdges.map(edge => {
                 const sourceIndex = sourceNodes.find(n => `node-${n.index}` === edge.source)?.index;
                 const targetIndex = sourceNodes.find(n => `node-${n.index}` === edge.target)?.index;
-                const isReachable = reachableNodes.has(sourceIndex) && reachableNodes.has(targetIndex);
+                // 检查这条边是否在路径上
+                const edgeKey = `${sourceIndex}-${targetIndex}`;
+                const isReachable = reachableEdges.has(edgeKey);
                 return {
                     ...edge,
                     data: {
@@ -1401,10 +1417,14 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
         } else {
             // 隐藏其他模式：只显示匹配的节点和边
             const nodes = currentNodes.filter(node => reachableNodes.has(node.data.index));
-            const nodeIdSet = new Set(nodes.map(n => n.id));
-            const edges = currentEdges.filter(edge => 
-                nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target)
-            );
+            
+            // 只保留在路径上的边
+            const edges = currentEdges.filter(edge => {
+                const sourceIndex = sourceNodes.find(n => `node-${n.index}` === edge.source)?.index;
+                const targetIndex = sourceNodes.find(n => `node-${n.index}` === edge.target)?.index;
+                const edgeKey = `${sourceIndex}-${targetIndex}`;
+                return reachableEdges.has(edgeKey);
+            });
             
             reloadGraphWithData(nodes, edges);
         }
