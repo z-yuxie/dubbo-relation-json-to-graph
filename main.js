@@ -303,7 +303,13 @@ function reloadGraphWithData(nodes, edges) {
     currentVisibleData = { nodes, edges };
     
     if (graph) {
-        graph.destroy();
+        try {
+            graph.destroy();
+        } catch (e) {
+            console.warn('Graph destroy warning:', e);
+            // 即使 destroy 失败也继续，将 graph 设为 null
+        }
+        graph = null;
     }
     
     const container = document.getElementById('container');
@@ -1295,6 +1301,7 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
     const direction = document.getElementById('filterDirection').value;
     const maxHops = parseInt(document.getElementById('filterMaxHops').value);
     const displayMode = document.querySelector('input[name="filterDisplayMode"]:checked').value;
+    const currentCanvasOnly = document.getElementById('filterCurrentCanvasOnly').checked;
     
     if (isNaN(startNodeIndex)) {
         alert('无效的起始节点');
@@ -1312,13 +1319,34 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
         currentNodes = cleared.nodes;
         currentEdges = cleared.edges;
         
-        const currentNodeIndices = new Set(currentNodes.map(n => n.data?.index));
+        // 根据“仅对当前画布”选项决定数据源
+        let sourceNodes, sourceLinks;
         
-        // 从原始数据中获取当前画布的节点和边
-        const sourceNodes = originalData.nodes.filter(node => currentNodeIndices.has(node.index));
-        const sourceLinks = originalData.links.filter(link => 
-            currentNodeIndices.has(link.source) && currentNodeIndices.has(link.target)
-        );
+        if (currentCanvasOnly) {
+            // 仅对当前画布：使用当前画布的数据
+            const currentNodeIndices = new Set(currentNodes.map(n => n.data?.index));
+            sourceNodes = originalData.nodes.filter(node => currentNodeIndices.has(node.index));
+            
+            // 关键修复：从当前画布的边中提取原始边数据
+            // 而不是从 originalData 中过滤
+            sourceLinks = [];
+            const currentEdgeSet = new Set();
+            currentEdges.forEach(edge => {
+                const sourceIndex = originalData.nodes.find(n => `node-${n.index}` === edge.source)?.index;
+                const targetIndex = originalData.nodes.find(n => `node-${n.index}` === edge.target)?.index;
+                if (sourceIndex !== undefined && targetIndex !== undefined) {
+                    const edgeKey = `${sourceIndex}-${targetIndex}`;
+                    if (!currentEdgeSet.has(edgeKey)) {
+                        currentEdgeSet.add(edgeKey);
+                        sourceLinks.push({ source: sourceIndex, target: targetIndex });
+                    }
+                }
+            });
+        } else {
+            // 对全部数据：使用原始完整数据
+            sourceNodes = originalData.nodes;
+            sourceLinks = originalData.links;
+        }
         
         // 构建邻接表
         const adjList = {};
@@ -1370,13 +1398,10 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
                     
                     // 根据方向记录边
                     if (direction === 'outgoing') {
-                        // 向外：记录 nodeIndex -> neighbor
                         reachableEdges.add(`${nodeIndex}-${neighbor}`);
                     } else if (direction === 'incoming') {
-                        // 向内：记录 neighbor -> nodeIndex
                         reachableEdges.add(`${neighbor}-${nodeIndex}`);
                     } else {
-                        // 双向：记录两个方向
                         reachableEdges.add(`${nodeIndex}-${neighbor}`);
                         reachableEdges.add(`${neighbor}-${nodeIndex}`);
                     }
@@ -1386,55 +1411,156 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
         
         // 根据显示模式处理
         if (displayMode === 'highlight') {
-            // 高亮模式：保留所有节点，高亮匹配的
-            const nodes = currentNodes.map(node => {
-                const isReachable = reachableNodes.has(node.data.index);
-                return {
+            // 高亮模式
+            let finalNodes, finalEdges;
+            
+            if (currentCanvasOnly) {
+                // 仅对当前画布：在现有节点中高亮
+                finalNodes = currentNodes.map(node => {
+                    const isReachable = reachableNodes.has(node.data.index);
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            highlighted: isReachable,
+                        }
+                    };
+                });
+                
+                finalEdges = currentEdges.map(edge => {
+                    const sourceIndex = sourceNodes.find(n => `node-${n.index}` === edge.source)?.index;
+                    const targetIndex = sourceNodes.find(n => `node-${n.index}` === edge.target)?.index;
+                    const edgeKey = `${sourceIndex}-${targetIndex}`;
+                    const isReachable = reachableEdges.has(edgeKey);
+                    return {
+                        ...edge,
+                        data: {
+                            ...edge.data,
+                            highlighted: isReachable,
+                        }
+                    };
+                });
+            } else {
+                // 对全部数据：需要添加新节点和边
+                const currentNodeIndices = new Set(currentNodes.map(n => n.data.index));
+                
+                // 构建当前画布上边的集合（使用 source-target 作为唯一标识）
+                const currentEdgeKeys = new Set();
+                currentEdges.forEach(e => {
+                    const sourceIndex = originalData.nodes.find(n => `node-${n.index}` === e.source)?.index;
+                    const targetIndex = originalData.nodes.find(n => `node-${n.index}` === e.target)?.index;
+                    if (sourceIndex !== undefined && targetIndex !== undefined) {
+                        currentEdgeKeys.add(`${sourceIndex}-${targetIndex}`);
+                    }
+                });
+                
+                // 添加匹配上但不在画布上的节点
+                const newNodes = sourceNodes
+                    .filter(node => reachableNodes.has(node.index) && !currentNodeIndices.has(node.index))
+                    .map(node => createNodeData(node));
+                
+                // 添加匹配上但不在画布上的边
+                // 注意：如果边已经在画布上，就不需要再次添加
+                const newEdges = [];
+                sourceLinks.forEach(link => {
+                    const edgeKey = `${link.source}-${link.target}`;
+                    // 只添加在路径上且不在画布上的边
+                    if (reachableEdges.has(edgeKey) && !currentEdgeKeys.has(edgeKey)) {
+                        // 使用 source-target 作为 ID，确保唯一性
+                        const edgeId = `edge-${link.source}-${link.target}`;
+                        newEdges.push(createEdgeData(link, edgeId));
+                    }
+                });
+                
+                // 合并节点，设置高亮
+                finalNodes = currentNodes.map(node => {
+                    const isReachable = reachableNodes.has(node.data.index);
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            highlighted: isReachable,
+                        }
+                    };
+                });
+                
+                // 添加新节点（高亮）
+                finalNodes = [...finalNodes, ...newNodes.map(node => ({
                     ...node,
                     data: {
                         ...node.data,
-                        highlighted: isReachable,
+                        highlighted: true,
                     }
-                };
-            });
-            
-            const edges = currentEdges.map(edge => {
-                const sourceIndex = sourceNodes.find(n => `node-${n.index}` === edge.source)?.index;
-                const targetIndex = sourceNodes.find(n => `node-${n.index}` === edge.target)?.index;
-                // 检查这条边是否在路径上
-                const edgeKey = `${sourceIndex}-${targetIndex}`;
-                const isReachable = reachableEdges.has(edgeKey);
-                return {
+                }))];
+                
+                // 合并边，设置高亮
+                finalEdges = currentEdges.map(edge => {
+                    const sourceIndex = originalData.nodes.find(n => `node-${n.index}` === edge.source)?.index;
+                    const targetIndex = originalData.nodes.find(n => `node-${n.index}` === edge.target)?.index;
+                    const edgeKey = `${sourceIndex}-${targetIndex}`;
+                    const isReachable = reachableEdges.has(edgeKey);
+                    return {
+                        ...edge,
+                        data: {
+                            ...edge.data,
+                            highlighted: isReachable,
+                        }
+                    };
+                });
+                
+                // 添加新边（高亮）
+                finalEdges = [...finalEdges, ...newEdges.map(edge => ({
                     ...edge,
                     data: {
                         ...edge.data,
-                        highlighted: isReachable,
+                        highlighted: true,
                     }
-                };
-            });
+                }))];
+            }
             
-            reloadGraphWithData(nodes, edges);
+            reloadGraphWithData(finalNodes, finalEdges);
         } else {
             // 隐藏其他模式：只显示匹配的节点和边
-            const nodes = currentNodes.filter(node => reachableNodes.has(node.data.index));
+            let finalNodes, finalEdges;
             
-            // 只保留在路径上的边
-            const edges = currentEdges.filter(edge => {
-                const sourceIndex = sourceNodes.find(n => `node-${n.index}` === edge.source)?.index;
-                const targetIndex = sourceNodes.find(n => `node-${n.index}` === edge.target)?.index;
-                const edgeKey = `${sourceIndex}-${targetIndex}`;
-                return reachableEdges.has(edgeKey);
-            });
+            if (currentCanvasOnly) {
+                // 仅对当前画布：从当前画布中过滤
+                finalNodes = currentNodes.filter(node => reachableNodes.has(node.data.index));
+                
+                finalEdges = currentEdges.filter(edge => {
+                    const sourceIndex = sourceNodes.find(n => `node-${n.index}` === edge.source)?.index;
+                    const targetIndex = sourceNodes.find(n => `node-${n.index}` === edge.target)?.index;
+                    const edgeKey = `${sourceIndex}-${targetIndex}`;
+                    return reachableEdges.has(edgeKey);
+                });
+            } else {
+                // 对全部数据：从全量数据中重新创建
+                finalNodes = sourceNodes
+                    .filter(node => reachableNodes.has(node.index))
+                    .map(node => createNodeData(node));
+                
+                finalEdges = sourceLinks
+                    .filter(link => {
+                        const edgeKey = `${link.source}-${link.target}`;
+                        return reachableEdges.has(edgeKey);
+                    })
+                    .map(link => {
+                        // 使用 source-target 作为 ID，确保唯一性
+                        const edgeId = `edge-${link.source}-${link.target}`;
+                        return createEdgeData(link, edgeId);
+                    });
+            }
             
-            reloadGraphWithData(nodes, edges);
+            reloadGraphWithData(finalNodes, finalEdges);
         }
         
         updateStats();
         closePathFilterModal();
         
+        const scopeMsg = currentCanvasOnly ? '当前画布' : '全部数据';
         const resultMsg = displayMode === 'highlight' 
-            ? `已高亮 ${reachableNodes.size} 个可达节点`
-            : `已过滤出 ${reachableNodes.size} 个可达节点`;
+            ? `已在${scopeMsg}中高亮 ${reachableNodes.size} 个可达节点`
+            : `已从${scopeMsg}中过滤出 ${reachableNodes.size} 个可达节点`;
         console.log(resultMsg);
         
     } catch (e) {
