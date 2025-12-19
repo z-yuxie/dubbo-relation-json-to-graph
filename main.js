@@ -344,8 +344,27 @@ function reloadGraphWithData(nodes, edges) {
         },
         edge: {
             style: {
-                stroke: '#99ADD1',
-                lineWidth: 2,
+                stroke: (d) => {
+                    // 如果边被标记为高亮，使用高亮颜色
+                    if (d.data?.highlighted === true) {
+                        return '#FF6B6B'; // 高亮红色
+                    }
+                    // 如果被标记为非高亮，使用半透明颜色
+                    if (d.data?.highlighted === false) {
+                        return '#99ADD166'; // 添加40%透明度
+                    }
+                    // 默认情况
+                    return '#99ADD1';
+                },
+                lineWidth: (d) => {
+                    if (d.data?.highlighted === true) {
+                        return 3; // 高亮边更粗
+                    }
+                    if (d.data?.highlighted === false) {
+                        return 1; // 非高亮边更细
+                    }
+                    return 2;
+                },
                 endArrow: true,
             },
         },
@@ -836,6 +855,14 @@ document.getElementById('searchPaths').addEventListener('click', async () => {
             const currentEdges = currentData.edges || [];
             const existingNodeIds = new Set(currentNodes.map(n => n.id));
             const existingEdgeKeys = new Set(currentEdges.map(e => `${e.source}-${e.target}`));
+            
+            // 创建匹配节点和边的ID集合
+            const matchedNodeIds = new Set(
+                Array.from(pathNodes).map(index => `node-${index}`)
+            );
+            const matchedEdgeKeys = new Set(
+                pathEdges.map(edge => `node-${edge.source}-node-${edge.target}`)
+            );
 
             const newNodes = originalData.nodes
                 .filter(node => pathNodes.has(node.index) && !existingNodeIds.has(`node-${node.index}`))
@@ -845,8 +872,66 @@ document.getElementById('searchPaths').addEventListener('click', async () => {
                 .filter(edge => !existingEdgeKeys.has(`node-${edge.source}-node-${edge.target}`))
                 .map((edge, idx) => createEdgeData(edge, `new-${idx}`));
 
-            nodes = [...currentNodes, ...newNodes];
-            edges = [...currentEdges, ...newEdges];
+            // 合并节点，为匹配的节点添加高亮样式
+            nodes = currentNodes.map(node => {
+                if (matchedNodeIds.has(node.id)) {
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            highlighted: true,
+                        }
+                    };
+                } else {
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            highlighted: false,
+                        }
+                    };
+                }
+            });
+            
+            // 添加新节点，标记为高亮
+            nodes = [...nodes, ...newNodes.map(node => ({
+                ...node,
+                data: {
+                    ...node.data,
+                    highlighted: true,
+                }
+            }))];
+            
+            // 合并边，为匹配的边添加高亮样式
+            edges = currentEdges.map(edge => {
+                const edgeKey = `${edge.source}-${edge.target}`;
+                if (matchedEdgeKeys.has(edgeKey)) {
+                    return {
+                        ...edge,
+                        data: {
+                            ...edge.data,
+                            highlighted: true,
+                        }
+                    };
+                } else {
+                    return {
+                        ...edge,
+                        data: {
+                            ...edge.data,
+                            highlighted: false,
+                        }
+                    };
+                }
+            });
+            
+            // 添加新边，标记为高亮
+            edges = [...edges, ...newEdges.map(edge => ({
+                ...edge,
+                data: {
+                    ...edge.data,
+                    highlighted: true,
+                }
+            }))];
         }
 
         if (!graph) initGraph();
