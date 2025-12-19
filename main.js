@@ -1105,6 +1105,27 @@ function hideContextMenus() {
     contextMenuTarget = null;
 }
 
+// 清除所有高亮状态
+function clearHighlightState(nodes, edges) {
+    const clearedNodes = nodes.map(node => {
+        const { highlighted, ...restData } = node.data || {};
+        return {
+            ...node,
+            data: restData
+        };
+    });
+    
+    const clearedEdges = edges.map(edge => {
+        const { highlighted, ...restData } = edge.data || {};
+        return {
+            ...edge,
+            data: restData
+        };
+    });
+    
+    return { nodes: clearedNodes, edges: clearedEdges };
+}
+
 // 显示节点右键菜单
 function showNodeContextMenu(evt) {
     hideContextMenus();
@@ -1138,8 +1159,13 @@ document.getElementById('hideEdge').addEventListener('click', () => {
     try {
         const edgeId = contextMenuTarget.id;
         const currentData = graph.getData();
-        const currentNodes = currentData.nodes || [];
-        const currentEdges = currentData.edges || [];
+        let currentNodes = currentData.nodes || [];
+        let currentEdges = currentData.edges || [];
+        
+        // 清除高亮状态
+        const cleared = clearHighlightState(currentNodes, currentEdges);
+        currentNodes = cleared.nodes;
+        currentEdges = cleared.edges;
         
         // 过滤掉被选中的边
         const filteredEdges = currentEdges.filter(edge => edge.id !== edgeId);
@@ -1160,8 +1186,13 @@ document.getElementById('hideNode').addEventListener('click', () => {
     try {
         const nodeId = contextMenuTarget.id;
         const currentData = graph.getData();
-        const currentNodes = currentData.nodes || [];
-        const currentEdges = currentData.edges || [];
+        let currentNodes = currentData.nodes || [];
+        let currentEdges = currentData.edges || [];
+        
+        // 清除高亮状态
+        const cleared = clearHighlightState(currentNodes, currentEdges);
+        currentNodes = cleared.nodes;
+        currentEdges = cleared.edges;
         
         // 过滤掉被选中的节点
         const filteredNodes = currentNodes.filter(node => node.id !== nodeId);
@@ -1228,22 +1259,10 @@ document.getElementById('applyPathFilter').addEventListener('click', async () =>
         let currentNodes = currentData.nodes || [];
         let currentEdges = currentData.edges || [];
         
-        // 清除所有节点和边的高亮状态（移除 highlighted 属性）
-        currentNodes = currentNodes.map(node => {
-            const { highlighted, ...restData } = node.data || {};
-            return {
-                ...node,
-                data: restData
-            };
-        });
-        
-        currentEdges = currentEdges.map(edge => {
-            const { highlighted, ...restData } = edge.data || {};
-            return {
-                ...edge,
-                data: restData
-            };
-        });
+        // 清除所有节点和边的高亮状态
+        const cleared = clearHighlightState(currentNodes, currentEdges);
+        currentNodes = cleared.nodes;
+        currentEdges = cleared.edges;
         
         const currentNodeIndices = new Set(currentNodes.map(n => n.data?.index));
         
